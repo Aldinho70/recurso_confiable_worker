@@ -1,3 +1,4 @@
+import { formatToISODateTimeUTC } from "./DataFormatter.js";
 /**
  * Convierte coordenadas decimales a formato DMS (Latitud)
  */
@@ -47,88 +48,6 @@ export function parseDateTime(timestamp) {
     }
 }
 
-
-/**
- * Desestrucuturar las respuesta de getInfoDevice
- */
-
-// export const destructWialon = (data) => {
-//     try {
-//         const deviceInfoList = [];
-//         data.map(element => {
-
-//             const name_sens = ["VecFleet_Odo", "VecFleet_Fuel", "VecFleet_RPM"];
-//             let odometer = 0, fuel = 0, RPM = 0;
-//             const { nm, pos, prms, sens, uid, flds } = element;
-//             const { y, x, s, t } = pos;
-//             const time = parseDateTime(t);
-//             let plate;
-
-//             /**
-//              * Obtener el valor del campo personalizado 'plate'
-//              */
-//                 for (const key in flds) {
-//                     if (!Object.hasOwn(flds, key)) continue;
-//                     const fld = flds[key];
-//                     if (fld.n == "plates") {
-//                         plate = fld.v
-//                     }
-//                 }
-
-//             /**
-//              * Obtener los valores de RPM, Fuel y Odometro
-//              */
-//                 for (const key in sens) {
-//                     if (!Object.hasOwn(sens, key)) continue;
-
-//                     const sen = sens[key];
-//                     if (name_sens.includes(sen.n)) {
-//                         switch (sen.n) {
-
-//                             case 'VecFleet_Odo': {
-//                                 odometer = prms['can_distance']?.v ?? 0;
-//                                 break;
-//                             }
-
-//                             case 'VecFleet_Fuel': {
-//                                 fuel = prms[sen.p]?.v ?? 0;
-//                                 break;
-//                             }
-
-//                             case 'VecFleet_RPM': {
-//                                 RPM = prms[sen.p]?.v ?? 0;
-//                                 break;
-//                             }
-
-//                             default: {
-//                                 return
-//                             }
-//                         }
-//                     }
-//                 }
-
-//             deviceInfoList.push({
-//                 imei: uid,
-//                 name: nm,
-//                 plate: plate,
-//                 date: time,
-//                 lat: x,
-//                 lon: y,
-//                 speed: s,
-//                 odometer: odometer,
-//                 direction: 0,
-//                 rpm: RPM,
-//                 temperature: 0,
-//                 fuel: fuel
-//             });
-//         });
-
-//         return deviceInfoList;
-//     } catch (error) {
-//         console.log(error);
-//     }
-// }
-
 const SENSORS = {
     ODO: 'VecFleet_Odo',
     FUEL: 'VecFleet_Fuel',
@@ -137,8 +56,8 @@ const SENSORS = {
 
 const CAN_DISTANCE_FACTOR = 0.005;
 
-const getPlate = (flds = {}) =>
-    Object.values(flds).find(f => f.n === 'plates')?.v;
+const getValueFlds = (flds = {}, field) =>
+    Object.values(flds).find(f => f.n === field)?.v;
 
 const getSensorValues = (sens = {}, prms = {}) => {
     try{
@@ -168,24 +87,35 @@ const getSensorValues = (sens = {}, prms = {}) => {
 const mapDevice = (element) => {
     const { nm, pos = {}, prms, sens, uid, flds } = element;
     const { x, y, s, t } = pos;
-
     const { odometro, fuel, rpm } = getSensorValues(sens, prms);
 
-    return {
-        imei: uid,
-        name: nm,
-        plate: getPlate(flds),
-        date: parseDateTime(t),
-        lon: x,
-        lat: y,
-        speed: s,
-        odometer: Math.round(odometro * CAN_DISTANCE_FACTOR) || 0,
-        // odometer,
-        direction: 0,
-        rpm,
-        temperature: 0,
-        fuel
-    };
+
+    if( getValueFlds(flds, "customer.name") ){
+        return {
+            // serialNumber: cid,
+            name: nm,
+            "customer.name": getValueFlds(flds, "customer.name"),
+            "customer.id": getValueFlds(flds, "cid"),
+            asset: nm.split(" ")[2],
+            // date: parseDateTime(t),
+            date: formatToISODateTimeUTC(t),
+            longitude: x,
+            latitude: y,
+            speed: s,
+            odometer: Math.round(odometro * CAN_DISTANCE_FACTOR) || 0,
+            code: "1",
+            direction: "0",
+            // rpm,
+            temperature: 0.0,
+            battery: 0,
+            ignition: (s > 0) ? true : false,
+            vehicleType: getValueFlds(flds, "tipo_unidad"),
+            
+            // fuel
+        };
+    }else{
+        return {}
+    }
 };
 
 
